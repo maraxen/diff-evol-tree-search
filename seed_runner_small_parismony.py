@@ -1,7 +1,7 @@
-import subprocess
-import os
 import math
-        
+import os
+import subprocess
+
 print("Which GPU do you want to restrict to?")
 id = input()
 os.environ["CUDA_VISIBLE_DEVICES"] = str(id)
@@ -26,21 +26,21 @@ base = base + ["-g", "0"]
 
 for l in leaves:
     cmd = base + ["-l", str(l)]
-    
+
     print(f"Running for {l} leaves")
-    
+
     for seed in seeds:
         # Add the seed argument to the command
         cmd_with_seed = cmd + ["-s", str(seed)]
 
         # Run the command with the modified seed
         print(f"-> Running for seed {seed}: ", end =", ")
-        
+
         #Use Popen instead of run and store the process object
         process = subprocess.Popen(cmd_with_seed, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        
+
         #Print the PID
         print(f"PID: {process.pid}")
         print(f"{process.stderr.read()}")
-        
+
         process.wait()

@@ -1,0 +1,65 @@
+[project]
+name = "trex"
+version = "0.1.0"
+description = "Differentiable algorithms for phylogenetic tree search using JAX."
+authors = [
+  { name = "Marielle Russo" }
+]
+readme = "readme.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+dependencies = [
+  "jax",
+  "pytest",
+  "equinox",
+  "jaxlib",
+  "jaxtyping",
+  "numpy",
+  "networkx",
+  "optax",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ruff",
+  "pytest-cov",
+  "black",
+  "mypy",
+  "pre-commit",
+]
+docs = [
+    "sphinx",
+    "sphinx-rtd-theme",
+    "sphinx-autodoc-typehints",
+    "sphinx-autobuild",
+    "myst-parser",
+    "sphinx-copybutton",
+    "sphinx-design",
+    "sphinxext-rediraffe",
+    "sphinx-book-theme",
+    "myst-nb",
+]
+tests = [
+    "pytest",
+    "pytest-cov",
+    "chex",
+]
+[tool.ruff]
+select = ["ALL"]
+ignore = ["PD"]
+line-length = 100
+indent-width = 2
+fix = true
+
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+
