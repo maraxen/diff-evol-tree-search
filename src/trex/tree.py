@@ -13,7 +13,6 @@ from trex.utils.types import (
   BatchOneHotEvoSequence,
   Cost,
   GroundTruthMetadata,
-  OneHotEvoSequence,
   SubstitutionMatrix,
 )
 
@@ -46,45 +45,48 @@ def update_tree(
   """Update and return a soft tree topology using trainable parameters.
 
   This function uses the Gumbel-Softmax trick to produce a differentiable
-  approximation of a discrete tree structure.
-
-  Args:
-      params: A dictionary containing trainable tree parameters under the key 'tree_params'.
-      epoch: The current epoch number, used to seed the random key.
-      temperature: The temperature for the Gumbel-Softmax.
-
-  Returns:
-      An updated soft tree topology.
-
+  approximation of a discrete tree structure. This version is fully vectorized
+  to provide stable gradients.
   """
   tree_params = params["tree_params"]
-  n_total_nodes = tree_params.shape[0] + 1
-  n_ancestors = tree_params.shape[1]
+  n_all_minus_1, n_ancestors = tree_params.shape
+  n_total_nodes = n_all_minus_1 + 1
   n_leaves = n_total_nodes - n_ancestors
 
-  if n_ancestors == 0 or tree_params.shape[0] == 0:
+  if n_ancestors == 0:
     return jnp.eye(n_total_nodes, dtype=tree_params.dtype)
 
   gumbel_noise = jax.random.gumbel(key, shape=tree_params.shape)
-
   perturbed_params = (tree_params + gumbel_noise) / temperature
 
-  masked_params = jnp.full((n_total_nodes, n_total_nodes), -jnp.inf)
+  # Start with a matrix of -infinity, which corresponds to zero probability after softmax
+  final_logits = jnp.full((n_total_nodes, n_total_nodes), -jnp.inf)
 
-  masked_params = masked_params.at[:n_ancestors, n_leaves:].set(
-    perturbed_params[:n_ancestors],
-  )
-  upper_indices = jnp.triu_indices(n_ancestors)
-  shifted_rows = upper_indices[0] + n_ancestors
-  shifted_cols = upper_indices[1] + n_leaves
-  shifted_indices = (shifted_rows, shifted_cols)
+  # 1. Populate leaf-to-ancestor logits (n_leaves x n_ancestors)
+  leaf_logits = perturbed_params[:n_leaves]
+  final_logits = final_logits.at[:n_leaves, n_leaves:].set(leaf_logits)
 
-  masked_params = masked_params.at[shifted_indices].set(
-    perturbed_params[n_ancestors:, :][upper_indices],
-  )
+  # 2. Populate ancestor-to-ancestor logits
+  # An ancestor i can only be a child of an ancestor j if j > i.
+  # This creates an upper-triangular structure for the ancestor block.
+  ancestor_logits = perturbed_params[n_leaves:]
 
-  masked_params = masked_params.at[-1, -1].set(1.0)
-  return nn.softmax(masked_params, axis=1)
+  # Create a mask to enforce the acyclic, upper-triangular constraint.
+  # The mask shape is (n_ancestors - 1, n_ancestors) to match the logits.
+  i = jnp.arange(n_ancestors - 1)[:, None]
+  j = jnp.arange(n_ancestors)[None, :]
+  # The mask is True where column index j is strictly greater than row index i
+  # (relative to the ancestor-only block).
+  ancestor_mask = j > i
+
+  # Apply the mask: invalid connections become -inf.
+  masked_ancestor_logits = jnp.where(ancestor_mask, ancestor_logits, -jnp.inf)
+  final_logits = final_logits.at[n_leaves:-1, n_leaves:].set(masked_ancestor_logits)
+
+  # 3. The root has no parent, so it points to itself before the softmax.
+  final_logits = final_logits.at[-1, -1].set(1.0)
+
+  return nn.softmax(final_logits, axis=1)
 
 
 @jax.jit
@@ -137,30 +139,18 @@ def enforce_graph_constraints(
 
 @jax.jit
 def compute_surrogate_cost(
-  sequences: BatchOneHotEvoSequence,
-  adjacency: AdjacencyMatrix,
-) -> Cost:
+  sequences: jnp.ndarray,  # (n_nodes, seq_len, n_states)
+  adjacency: jnp.ndarray,  # (n_nodes, n_nodes)
+) -> jnp.ndarray:
   """Compute a differentiable surrogate for the tree traversal cost.
 
-  Args:
-      sequences: A one-hot encoded batch of sequences.
-      adjacency: The soft tree topology.
-
-  Returns:
-      The surrogate traversal cost.
-
+  This version is the direct differentiable analog of the parsimony score,
   """
+  diff = sequences[:, jnp.newaxis, ...] - sequences[jnp.newaxis, :, ...]
 
-  def surrogate_cost(
-    one_hot_sequence: OneHotEvoSequence,  # Shape: (n_nodes, n_states)
-    adjacency: AdjacencyMatrix,
-  ) -> Cost:
-    """Compute the surrogate cost for a single sequence position."""
-    parent_sequence = jnp.matmul(adjacency, one_hot_sequence)
-    return jnp.sum(jnp.abs(parent_sequence - one_hot_sequence)) / 2
+  squared_distance = jnp.sum(diff**2, axis=(-1, -2))
 
-  costs = jax.vmap(surrogate_cost, in_axes=(1, None))(sequences, adjacency)
-  return jnp.sum(costs)
+  return jnp.sum(squared_distance * adjacency) / 2
 
 
 @jax.jit
@@ -180,15 +170,17 @@ def compute_cost(
       The exact parsimony score.
 
   """
-  discrete_tree_topology = discretize_tree_topology(adjacency, adjacency.shape[0])
-  discrete_sequences = jnp.argmax(sequences, axis=2)
+  # Convert inputs to discrete integer representations
+  sequences_int = jnp.argmax(sequences, axis=2)
+  discrete_adj = discretize_tree_topology(adjacency, adjacency.shape[0])
 
-  parent_sequences = jnp.matmul(discrete_tree_topology, discrete_sequences)
+  # For each node `i`, find the index of its parent
+  parent_indices = jnp.argmax(discrete_adj, axis=1)
 
-  return substitution_matrix[
-    jnp.round(parent_sequences).astype(jnp.int8),
-    jnp.round(discrete_sequences).astype(jnp.int8),
-  ].sum()
+  # Gather the sequences for all parents
+  parent_seqs = sequences_int[parent_indices]
+
+  return substitution_matrix[parent_seqs, sequences_int][:-1, :].sum()
 
 
 def compute_loss(  # noqa: PLR0913
@@ -217,6 +209,7 @@ def compute_loss(  # noqa: PLR0913
       metadata: Dictionary containing metadata.
       temperature: Temperature for softmax and loss scaling.
       epoch: The current training epoch.
+      graph_constraint_scale: Scaling factor for the tree constraint loss.
       verbose: If True, returns a detailed breakdown of the loss components.
       fix_seqs: If True, do not update sequences (only update tree).
       fix_tree: If True, do not update tree (only update sequences).

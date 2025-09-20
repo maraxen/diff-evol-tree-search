@@ -54,10 +54,12 @@ def test_run_sankoff_basic():
     ],
     dtype=jnp.float64,
   )
+  leaf_seqs = seqs[:3]
+
   rec_seqs, dp, total_cost = run_sankoff(
     adj,
     cost_matrix,
-    seqs,
+    leaf_seqs,
     5,
     2,
     3,

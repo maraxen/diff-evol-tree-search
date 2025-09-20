@@ -20,7 +20,7 @@ from trex.utils.types import (
 
 
 @partial(jax.jit, static_argnames=("verbose"))
-def run_dp(
+def run_dp(  # noqa: PLR0913
   adjacency_matrix: AdjacencyMatrix,
   dynamic_programming_table: DPTable,
   backtracking_table: BacktrackingTable,
@@ -76,17 +76,17 @@ def run_dp(
       return carry + cost, (child_node, char)
 
     # Calculate costs for children
-    total_cost, (nodes_a, nodes_b) = jax.lax.scan(
+    total_cost, (child_node_arr, child_char_arr) = jax.lax.scan(
       child_cost_fun,
       jnp.zeros_like(dp_val[0]),
       jnp.arange(2, dtype=jnp.int32),
     )
 
     dp_val = dp_val.at[node, :].set(total_cost)
-    dp_nodes_val = dp_nodes_val.at[node, :, 0].set(nodes_a[0])
-    dp_nodes_val = dp_nodes_val.at[node, :, 1].set(nodes_a[1])
-    dp_nodes_val = dp_nodes_val.at[node, :, 2].set(nodes_b[0])
-    dp_nodes_val = dp_nodes_val.at[node, :, 3].set(nodes_b[1])
+    dp_nodes_val = dp_nodes_val.at[node, :, 0].set(child_node_arr[0])  # Child 1 Node
+    dp_nodes_val = dp_nodes_val.at[node, :, 1].set(child_char_arr[0])  # Child 1 States
+    dp_nodes_val = dp_nodes_val.at[node, :, 2].set(child_node_arr[1])  # Child 2 Node
+    dp_nodes_val = dp_nodes_val.at[node, :, 3].set(child_char_arr[1])  # Child 2 States
 
     jax.lax.cond(
       verbose,
@@ -114,7 +114,7 @@ vectorized_dp = jax.vmap(run_dp, (None, 0, 0, 1, None), 0)
 
 
 @partial(jax.jit, static_argnames=("return_path", "n_all", "n_states", "n_leaves"))
-def run_sankoff(
+def run_sankoff(  # noqa: PLR0913
   adjacency_matrix: AdjacencyMatrix,
   cost_matrix: CostMatrix,
   sequences: BatchEvoSequence,
@@ -130,7 +130,9 @@ def run_sankoff(
       adjacency_matrix: The adjacency matrix of the tree.
       cost_matrix: The substitution cost matrix.
       sequences: A batch of leaf sequences.
-      metadata: Metadata about the tree and sequences.
+      n_all (int): The total number of nodes in the tree.
+      n_states (int): The number of possible states (characters).
+      n_leaves (int): The number of leaf nodes.
       return_path: If True, reconstructs and returns the ancestral sequences.
 
   Returns:
@@ -158,9 +160,8 @@ def run_sankoff(
     sequences,
     cost_matrix,
   )
-
-  reconstructed_sequences = sequences.copy().astype(jnp.float64)
-
+  reconstructed_sequences = jnp.zeros((n_all, sequence_length), dtype=jnp.float64)
+  reconstructed_sequences = reconstructed_sequences.at[:n_leaves, :].set(sequences[:n_leaves])
   if return_path:
     root_node = jnp.asarray(adjacency_matrix.shape[0] - 1, jnp.int32)
 
@@ -197,8 +198,7 @@ def backtrack_sankoff_jit(
   n_all: int,
   n_leaves: int,
 ) -> ReconstructedSequence:
-  """Reconstruct the ancestral sequence for a single position using a
-  JIT-compatible while_loop.
+  """Reconstruct the ancestral sequence for a single position using a JIT-compatible while_loop.
 
   Args:
       root_node: The index of the root node.
@@ -264,6 +264,6 @@ def backtrack_sankoff_jit(
     )
 
   # 4. Run the while_loop
-  _, _, final_chars = jax.lax.while_loop(cond_fun, body_fun, loop_state)
+  _, _, final_chars = jax.lax.while_loop(cond_fun, body_fun, loop_state)  # pyright: ignore[reportArgumentType]
 
   return final_chars

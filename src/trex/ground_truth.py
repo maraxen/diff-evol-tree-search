@@ -78,7 +78,7 @@ def _generate_tree_recursive(  # noqa: PLR0913
 
   """
   if current_depth > target_depth:
-    return parent_seq
+    return parent_seq  # pyright: ignore[reportReturnType]
 
   mutation_key1, mutation_key2, tree_key1, tree_key2 = random.split(key, 4)
 
@@ -103,7 +103,7 @@ def _generate_tree_recursive(  # noqa: PLR0913
   )
 
   # Return the parent sequence and its two child subtrees as a tuple
-  return (parent_seq, child_trees[0], child_trees[1])
+  return (parent_seq, child_trees[0], child_trees[1])  # pyright: ignore[reportReturnType]
 
 
 def generate_groundtruth(
@@ -121,12 +121,11 @@ def generate_groundtruth(
   structure as an adjacency matrix.
 
   Args:
-      metadata: Dictionary containing specifications for the tree:
-          "n_leaves": The number of leaf nodes in the tree (must be a power of 2).
-          "seq_length": The length of each sequence.
-          "n_states": The size of the alphabet (e.g., 4 for DNA).
-          "n_mutations": The number of mutations to apply at each split.
-      seed: The random seed for reproducibility.
+      n_leaves (int): The number of leaf nodes in the tree (must be a power of 2).
+      seq_length (int): The length of each sequence.
+      n_states (int): The size of the alphabet (e.g., 4 for DNA).
+      n_mutations (int): The number of mutations to apply at each split.
+      seed (int, optional): The random seed for reproducibility. Defaults to 42.
 
   Returns:
       A tuple containing:
@@ -141,7 +140,6 @@ def generate_groundtruth(
     msg = "n_leaves must be a power of 2."
     raise ValueError(msg)
 
-  depth = int(jnp.log2(n_leaves))
   root_seq = jnp.zeros(seq_length, dtype=jnp.int8)
   n_ancestors = n_leaves - 1
   n_all = n_leaves + n_ancestors
