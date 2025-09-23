@@ -1,53 +1,202 @@
-# Differentiable Search of Evolutionary Trees from Leaves
+# Differentiable Evolution Tree Search
 
-Our work introduces a differentiable approach to phylogenetic tree construction, optimizing both tree and ancestral sequences.
+A JAX-based implementation of differentiable algorithms for phylogenetic tree search, providing a modern alternative to traditional heuristic methods through gradient-based optimization.
 
-Pre-print - https://www.biorxiv.org/content/10.1101/2023.07.23.550206v1
+## Overview
 
-* [ICML 2023 Workshop (SODS/DiffAE) Poster (PDF)](https://ramith.fyi/assets/pdf/Diff-Evol-Trees_ICML.pdf)
-* Eric J. Ma has written a very detailed article on our paper's key contribution : making the trees and sequences differentiable. You can read it [here](https://ericmjl.github.io/blog/2023/8/7/journal-club-differentiable-search-of-evolutionary-trees/). It does a great job at explaining our method.
+This project explores differentiable phylogenetic algorithms that leverage the JAX ecosystem for high-performance, JIT-compiled tree search operations. By implementing classic phylogenetic algorithms (such as Sankoff's algorithm for maximum parsimony) in a differentiable framework, we enable gradient-based optimization of both tree topologies and ancestral sequences.
 
-![Optimization of seqs and tree](https://github.com/diff-trees/diff-evol-tree-search/blob/main/intro_vid.gif)
+The core innovation lies in making traditionally discrete phylogenetic operations differentiable while maintaining computational efficiency through JAX's functional programming paradigm and automatic differentiation capabilities.
 
-To run examples in colab, click the below link
+## Key Features & Differentiable Components
 
-<a href="https://colab.research.google.com/github/diff-trees/diff-evol-tree-search/blob/main/run_on_colab.ipynb" target="_blank"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> 
+### Differentiable Algorithms
 
-#### **Checklist**
+- **Sankoff's Algorithm**: Differentiable implementation for maximum parsimony scoring
+- **Tree Topology Optimization**: Gradient-based search over tree space
+- **Ancestral Sequence Reconstruction**: Differentiable inference of internal node sequences
+- **Batch Processing**: Vectorized operations for multiple tree evaluations
 
-* Make sure to select GPU (or remove the `-g 0` flag when running)
-* You can specify your wandb account if you intend to log statistics/tree illustrations
+### JAX Integration
 
+- **JIT Compilation**: All core algorithms are JIT-compatible for optimal performance
+- **Functional Programming**: Immutable data structures and pure functions throughout
+- **Automatic Differentiation**: Full gradient computation for all model parameters
+- **VMAP Support**: Efficient batching across multiple trees or datasets
 
-#### **Example : running for trees with 16 leaves**
+## Getting Started
 
-* To run for different number of leaves change the -l to the desired value
+### Installation
 
-Other params :
+1. **Clone the repository:**
 
-* sequence length : `-sl`
-* mutations per bifurcation : `-m`
-* alphabet size : `-nl`
-* epochs/steps : `-e`
-* initialization count to run in parallel : `-ic`
+   ```bash
+   git clone <repository-url>
+   cd trex
+   ```markdown
 
-During running, every 200 steps it will print the `soft_parsimony_score` and `parsimony_score` (last two values in each line)
+2. **Install dependencies:**
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+   Or if using the project configuration:
+
+   ```bash
+   pip install -e .
+   ```
+
+## Testing
+
+### Unit Tests
+
+Run the complete test suite:
 
 ```bash
-!python train_batch_implicit_diff.py -l 16 -nl 20 -m 50 -sl 256 -tLs [0,0.005,10,50] -lr 0.1 -lr_seq 0.01 -t float64-multi-init-run -p Batch-Run-Maximum-Parsimony -alt -n "Final Run" -g 0 -e 5000 -ai 1 -ic 50 -s 42
+python -m pytest tests/
 ```
 
+### Convergence Tests
 
+Verify algorithmic correctness and convergence properties:
 
--------
-##### Current Limitations : 
+```bash
+python -m pytest tests/test_convergence.py -v
+```
 
-- [ ] Groundtruth trees we evaluate against (optimal solutions) are [`perfect binary trees`](https://xlinux.nist.gov/dads/HTML/perfectBinaryTree.html). 
-We need to evaluate on diverse grountruth trees of uneven leaf levels
-  - [ ] Full binary trees (ramithuh/differentiable-trees#30)
-  - [ ] Then, binary trees in general
-- [ ] Get rid of site-wise independence assumption
+The test suite covers:
 
-We are working on these aspects in another repo : https://github.com/ramithuh/differentiable-trees.
-Once those are tested and verified, this repo will be updated. 
-If you have any suggestions/comments/feedback feel free to reach us.
+- Numerical correctness of differentiable algorithms
+- Gradient computation accuracy
+- JAX transformation compatibility (`jit`, `vmap`, `scan`)
+- Edge cases and boundary conditions
+- Performance benchmarks
+
+### Test Coverage
+
+Generate coverage reports:
+
+```bash
+python -m pytest tests/ --cov=modules --cov=src/trex --cov-report=html
+```
+
+## Code Structure
+
+```bash
+trex/
+├── modules/                    # Core algorithmic components
+│   ├── sankoff.py             # Differentiable Sankoff algorithm
+│   └── ...                    # Additional phylogenetic modules
+├── src/trex/                  # Main package source
+├── tests/                     # Comprehensive test suite
+│   ├── test_convergence.py    # Convergence and accuracy tests
+│   └── ...                    # Unit tests mirroring module structure
+├── pyproject.toml             # Project configuration and dependencies
+├── AGENTS.md                  # Development guidelines and coding standards
+├── requirements.txt           # Python dependencies
+└── README.md                  # This file
+```
+
+### Key Directories
+
+- **`modules/`**: Contains the core differentiable phylogenetic algorithms, each implemented as pure JAX functions
+- **`src/trex/`**: Main package organization following Python packaging best practices
+- **`tests/`**: Comprehensive test coverage including unit tests and convergence validation
+
+### Configuration Files
+
+- **`pyproject.toml`**: Project metadata, dependencies, and tool configurations (Ruff, Pyright)
+- **`AGENTS.md`**: Detailed coding standards and development practices for contributors
+
+## Development Standards
+
+This project adheres to strict code quality standards:
+
+- **Linting**: Ruff with comprehensive rule enforcement (`select = ["ALL"]`)
+- **Type Checking**: Pyright in strict mode for complete type safety
+- **Testing**: High coverage requirements (target: 90%) using pytest
+- **Documentation**: Google-style docstrings for all public functions
+- **JAX Compatibility**: All numerical code must be JIT/VMAP/SCAN compatible
+
+## Current Limitations & Planned Improvements
+
+### Known Limitations
+
+- **Tree Topology Representation**: Current implementation may have constraints on tree topology parameterization
+- **Scalability**: Performance evaluation needed for very large phylogenies (>100 taxa)
+- **Algorithm Coverage**: Limited to maximum parsimony; maximum likelihood methods planned
+
+### Future Developments
+
+- **Maximum Likelihood**: Differentiable implementation of likelihood-based inference
+- **Advanced Tree Moves**: More sophisticated topology proposal mechanisms
+- **Benchmarking Suite**: Comprehensive comparison with traditional phylogenetic software
+- **GPU Acceleration**: Full exploitation of JAX's GPU capabilities for large-scale problems
+- **Bayesian Methods**: Integration of probabilistic programming for uncertainty quantification
+
+### Future Research Directions
+
+- **Hybrid Methods**: Combining gradient-based optimization with traditional heuristics
+- **Neural Architectures**: Integration with neural network components for learned priors
+- **Multi-objective Optimization**: Simultaneous optimization of multiple phylogenetic criteria
+
+## Contribution Guidelines
+
+Please refer to `AGENTS.md` for detailed contribution guidelines, including:
+
+- JAX programming best practices
+- Code style and linting requirements
+- Testing standards and procedures
+- Documentation expectations
+
+## License
+
+[License information to be added]
+
+## Citation
+
+[Citation information to be added upon publication]
+
+- **Testing**: High coverage requirements (target: 90%) using pytest
+- **Documentation**: Google-style docstrings for all public functions
+- **JAX Compatibility**: All numerical code must be JIT/VMAP/SCAN compatible
+
+## Current Limitations & Future Work
+
+### Limitations
+
+- **Tree Topology Representation**: Current implementation may have constraints on tree topology parameterization
+- **Scalability**: Performance evaluation needed for very large phylogenies (>100 taxa)
+- **Algorithm Coverage**: Limited to maximum parsimony; maximum likelihood methods planned
+
+### Planned Developments
+
+- **Maximum Likelihood**: Differentiable implementation of likelihood-based inference
+- **Advanced Tree Moves**: More sophisticated topology proposal mechanisms
+- **Benchmarking Suite**: Comprehensive comparison with traditional phylogenetic software
+- **GPU Acceleration**: Full exploitation of JAX's GPU capabilities for large-scale problems
+- **Bayesian Methods**: Integration of probabilistic programming for uncertainty quantification
+
+### Research Directions
+
+- **Hybrid Methods**: Combining gradient-based optimization with traditional heuristics
+- **Neural Architectures**: Integration with neural network components for learned priors
+- **Multi-objective Optimization**: Simultaneous optimization of multiple phylogenetic criteria
+
+## Contributing
+
+Please refer to `AGENTS.md` for detailed contribution guidelines, including:
+
+- JAX programming best practices
+- Code style and linting requirements
+- Testing standards and procedures
+- Documentation expectations
+
+## License Details
+
+[License information to be added]
+
+## Citation Details
+
+[Citation information to be added upon publication]
