@@ -183,12 +183,13 @@ def compute_cost(
   return substitution_matrix[parent_seqs, sequences_int][:-1, :].sum()
 
 
-def compute_loss(  # noqa: PLR0913
+def compute_loss(
   key: PRNGKeyArray,
   params: dict[str, Array | list[Array]],
   sequences: BatchEvoSequence,
   metadata: GroundTruthMetadata,
   temperature: float,
+  adjacency: jax.Array,
   *,
   graph_constraint_scale: float = 10.0,
   verbose: bool = False,
@@ -220,9 +221,7 @@ def compute_loss(  # noqa: PLR0913
   """
   updated_sequences = sequences if fix_seqs else update_seq(params, sequences, temperature)
   key, update_tree_key = jax.random.split(key)
-  updated_tree_topology = (
-    jnp.eye(metadata["n_all"]) if fix_tree else update_tree(update_tree_key, params)
-  )
+  updated_tree_topology = adjacency if fix_tree else update_tree(update_tree_key, params)
 
   surrogate_cost = compute_surrogate_cost(updated_sequences, updated_tree_topology)
   tree_constraint_loss = enforce_graph_constraints(updated_tree_topology, graph_constraint_scale)

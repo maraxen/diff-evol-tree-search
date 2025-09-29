@@ -20,7 +20,7 @@ from trex.utils.types import (
 
 
 @partial(jax.jit, static_argnames=("verbose"))
-def run_dp(  # noqa: PLR0913
+def run_dp(
   adjacency_matrix: AdjacencyMatrix,
   dynamic_programming_table: DPTable,
   backtracking_table: BacktrackingTable,
@@ -64,11 +64,6 @@ def run_dp(  # noqa: PLR0913
       carry: jax.Array,
       child_idx: jax.Array,
     ) -> tuple[jax.Array, tuple[jax.Array, jax.Array]]:
-      jax.debug.print(
-        "Processing child {child_idx} of node {node}",
-        child_idx=child_idx + 1,
-        node=node + 1,
-      )
       child_node = children[child_idx]
       cost_array = cost_matrix + dp_val[child_node, :]
       cost = jnp.min(cost_array, axis=1)
@@ -114,7 +109,7 @@ vectorized_dp = jax.vmap(run_dp, (None, 0, 0, 1, None), 0)
 
 
 @partial(jax.jit, static_argnames=("return_path", "n_all", "n_states", "n_leaves"))
-def run_sankoff(  # noqa: PLR0913
+def run_sankoff(
   adjacency_matrix: AdjacencyMatrix,
   cost_matrix: CostMatrix,
   sequences: BatchEvoSequence,
@@ -143,15 +138,15 @@ def run_sankoff(  # noqa: PLR0913
   adjacency_matrix = adjacency_matrix.at[-1, -1].set(0)  # Remove self-connection at the root
 
   # Ensure correct dtypes
-  adjacency_matrix = adjacency_matrix.astype(jnp.float64)
-  sequences = sequences.astype(jnp.float64)
-  cost_matrix = cost_matrix.astype(jnp.float64)
+  adjacency_matrix = adjacency_matrix.astype(jnp.float32)
+  sequences = sequences.astype(jnp.float32)
+  cost_matrix = cost_matrix.astype(jnp.float32)
 
   sequence_length = sequences.shape[1]
 
   # Initialize DP tables
-  dp_nodes = jnp.zeros((sequence_length, n_all, n_states, 4), dtype=jnp.float64)
-  dp = jnp.full((sequence_length, n_all, n_states), 1e5, dtype=jnp.float64)
+  dp_nodes = jnp.zeros((sequence_length, n_all, n_states, 4), dtype=jnp.float32)
+  dp = jnp.full((sequence_length, n_all, n_states), 1e5, dtype=jnp.float32)
 
   dp, backtracking_connections = vectorized_dp(
     adjacency_matrix,
@@ -160,7 +155,7 @@ def run_sankoff(  # noqa: PLR0913
     sequences,
     cost_matrix,
   )
-  reconstructed_sequences = jnp.zeros((n_all, sequence_length), dtype=jnp.float64)
+  reconstructed_sequences = jnp.zeros((n_all, sequence_length), dtype=jnp.float32)
   reconstructed_sequences = reconstructed_sequences.at[:n_leaves, :].set(sequences[:n_leaves])
   if return_path:
     root_node = jnp.asarray(adjacency_matrix.shape[0] - 1, jnp.int32)
