@@ -80,5 +80,7 @@ def test_compute_loss_basic():
   seqs = jnp.zeros((4, 5, 4))  # (n_nodes, seq_len, n_states)
   metadata = {"n_all": 4, "n_states": 4}
   key = jax.random.PRNGKey(0)
-  loss = compute_loss(key, params, seqs, metadata, temperature=1.0)
+  # Dummy adjacency matrix for the test
+  adjacency = jnp.eye(4)
+  loss = compute_loss(key, params, seqs, metadata, temperature=1.0, adjacency=adjacency)
   assert not jnp.isnan(loss) and loss >= 0

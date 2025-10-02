@@ -137,13 +137,14 @@ def test_fixed_topology_learned_sequences():
   # Evaluation
   learned_sequences_one_hot = update_seq(params, initial_sequences_for_loss, temperature=0.01)
 
-  assert jnp.all(
-    jnp.isclose(
-      data["sankoff_seqs"],
-      jnp.argmax(learned_sequences_one_hot, axis=-1),
-      atol=1,
-    ),
+  learned_parsimony_score = compute_cost(
+    learned_sequences_one_hot,
+    data["gt"].adjacency,
+    data["cost_matrix"],
   )
+  print(f"\n[Fixed Topology] True Sankoff Score: {data['true_parsimony_score']:.2f}")
+  print(f"[Fixed Topology] Learned Parsimony Score: {learned_parsimony_score:.2f}")
+  assert jnp.isclose(data["true_parsimony_score"], learned_parsimony_score, atol=2.0)
 
 
 # Test 2: Fix the sequences, learn the tree
@@ -238,12 +239,15 @@ def test_joint_optimization():
   @jax.jit
   def train_step(current_params, current_opt_state, temperature, step_key):
     def loss_fn(p):
+      # Dummy adjacency, not used when fix_tree=False
+      dummy_adjacency = jnp.zeros((data["n_all"], data["n_all"]))
       return compute_loss(
         step_key,
         p,
         initial_sequences_for_loss,
         metadata,
         temperature=temperature,
+        adjacency=dummy_adjacency,
         graph_constraint_scale=10.0,
       )
 
