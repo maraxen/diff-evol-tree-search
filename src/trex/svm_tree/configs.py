@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Optional
 
 
 class ModelType(Enum):
@@ -7,6 +8,7 @@ class ModelType(Enum):
 
     BASE_TREE = "base_tree"
     SINGLE_SVM = "single_svm"
+    LEARNABLE_HIERARCHICAL_SVM = "learnable_hierarchical_svm"
 
 
 @dataclass
@@ -14,8 +16,8 @@ class DataConfig:
     """Configuration for data loading."""
 
     batch_size: int = 128
-    train_subset_size: int = None
-    test_subset_size: int = None
+    train_subset_size: Optional[int] = None
+    test_subset_size: Optional[int] = None
 
 
 @dataclass
@@ -71,3 +73,14 @@ class LearnableMNISTConfig:
     data: DataConfig = field(default_factory=DataConfig)
     model: LearnableModelConfig = field(default_factory=LearnableModelConfig)
     train: TrainConfig = field(default_factory=TrainConfig)
+    wandb: WandbConfig = field(default_factory=WandbConfig)
+
+
+@dataclass
+class LearnableHierarchicalSVMConfig:
+    """Top-level configuration for the learnable hierarchical SVM."""
+
+    data: DataConfig = field(default_factory=DataConfig)
+    model: LearnableModelConfig = field(default_factory=LearnableModelConfig)
+    train: TrainConfig = field(default_factory=TrainConfig)
+    wandb: WandbConfig = field(default_factory=WandbConfig)
