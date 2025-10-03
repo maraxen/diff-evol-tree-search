@@ -17,6 +17,9 @@ dependencies = [
   "numpy",
   "networkx",
   "optax",
+  "tqdm",
+  "torch",
+  "torchvision",
 ]
 
 [project.optional-dependencies]

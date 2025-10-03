@@ -3,50 +3,65 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Cython build files
-*.c
-*.cpp
+# C extensions
 *.so
-*.pyd
-*.pyo
-*.pyd
-*.html
 
-# Cython source files (optional, if you want to ignore generated .c/.cpp but not .pyx)
-#*.pyx
-#*.pxd
-#*.pxi
-
-# Build directories
+# Distribution / packaging
+.Python
 build/
+develop-eggs/
 dist/
+downloads/
+eggs/
 .eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
 *.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints/
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
 
-# Test, coverage, and profiling files
-.coverage
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
 .tox/
 .nox/
-.cache/
-pytest_cache/
-htmlcov/
-*.prof
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
 
-# OS files
-.DS_Store
-Thumbs.db
-
-# Editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Environment files
+# Environments
 .env
 .venv
 env/
 venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Project-specific
+data/
+uv.lock
+.mypy_cache/
+.ruff_cache/
