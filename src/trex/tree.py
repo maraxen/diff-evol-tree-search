@@ -38,55 +38,62 @@ def discretize_tree_topology(
 
 @jax.jit
 def update_tree(
-  key: PRNGKeyArray,
-  params: dict[str, Array],
-  temperature: float = 1.0,
+    key: PRNGKeyArray,
+    params: dict[str, Array],
+    temperature: float = 1.0,
+    gates: Array | None = None,
 ) -> AdjacencyMatrix:
-  """Update and return a soft tree topology using trainable parameters.
+    """Update and return a soft tree topology using trainable parameters.
+    This function uses the Gumbel-Softmax trick to produce a differentiable
+    approximation of a discrete tree structure. It can also apply a gating
+    mechanism to the logits before the softmax.
+    """
+    tree_params = params["tree_params"]
+    n_all_minus_1, n_ancestors = tree_params.shape
+    n_total_nodes = n_all_minus_1 + 1
+    n_leaves = n_total_nodes - n_ancestors
 
-  This function uses the Gumbel-Softmax trick to produce a differentiable
-  approximation of a discrete tree structure. This version is fully vectorized
-  to provide stable gradients.
-  """
-  tree_params = params["tree_params"]
-  n_all_minus_1, n_ancestors = tree_params.shape
-  n_total_nodes = n_all_minus_1 + 1
-  n_leaves = n_total_nodes - n_ancestors
+    if n_ancestors == 0:
+        return jnp.eye(n_total_nodes, dtype=tree_params.dtype)
 
-  if n_ancestors == 0:
-    return jnp.eye(n_total_nodes, dtype=tree_params.dtype)
+    gumbel_noise = jax.random.gumbel(key, shape=tree_params.shape)
+    perturbed_params = (tree_params + gumbel_noise)
 
-  gumbel_noise = jax.random.gumbel(key, shape=tree_params.shape)
-  perturbed_params = (tree_params + gumbel_noise) / temperature
+    # Apply gates to the logits before the temperature scaling
+    if gates is not None:
+        perturbed_params *= gates
 
-  # Start with a matrix of -infinity, which corresponds to zero probability after softmax
-  final_logits = jnp.full((n_total_nodes, n_total_nodes), -jnp.inf)
+    perturbed_params /= temperature
 
-  # 1. Populate leaf-to-ancestor logits (n_leaves x n_ancestors)
-  leaf_logits = perturbed_params[:n_leaves]
-  final_logits = final_logits.at[:n_leaves, n_leaves:].set(leaf_logits)
 
-  # 2. Populate ancestor-to-ancestor logits
-  # An ancestor i can only be a child of an ancestor j if j > i.
-  # This creates an upper-triangular structure for the ancestor block.
-  ancestor_logits = perturbed_params[n_leaves:]
+    # Start with a matrix of -infinity, which corresponds to zero probability after softmax
+    final_logits = jnp.full((n_total_nodes, n_total_nodes), -jnp.inf)
 
-  # Create a mask to enforce the acyclic, upper-triangular constraint.
-  # The mask shape is (n_ancestors - 1, n_ancestors) to match the logits.
-  i = jnp.arange(n_ancestors - 1)[:, None]
-  j = jnp.arange(n_ancestors)[None, :]
-  # The mask is True where column index j is strictly greater than row index i
-  # (relative to the ancestor-only block).
-  ancestor_mask = j > i
+    # 1. Populate leaf-to-ancestor logits (n_leaves x n_ancestors)
+    leaf_logits = perturbed_params[:n_leaves]
+    final_logits = final_logits.at[:n_leaves, n_leaves:].set(leaf_logits)
 
-  # Apply the mask: invalid connections become -inf.
-  masked_ancestor_logits = jnp.where(ancestor_mask, ancestor_logits, -jnp.inf)
-  final_logits = final_logits.at[n_leaves:-1, n_leaves:].set(masked_ancestor_logits)
+    # 2. Populate ancestor-to-ancestor logits
+    # An ancestor i can only be a child of an ancestor j if j > i.
+    # This creates an upper-triangular structure for the ancestor block.
+    ancestor_logits = perturbed_params[n_leaves:]
 
-  # 3. The root has no parent, so it points to itself before the softmax.
-  final_logits = final_logits.at[-1, -1].set(1.0)
+    # Create a mask to enforce the acyclic, upper-triangular constraint.
+    # The mask shape is (n_ancestors - 1, n_ancestors) to match the logits.
+    i = jnp.arange(n_ancestors - 1)[:, None]
+    j = jnp.arange(n_ancestors)[None, :]
+    # The mask is True where column index j is strictly greater than row index i
+    # (relative to the ancestor-only block).
+    ancestor_mask = j > i
 
-  return nn.softmax(final_logits, axis=1)
+    # Apply the mask: invalid connections become -inf.
+    masked_ancestor_logits = jnp.where(ancestor_mask, ancestor_logits, -jnp.inf)
+    final_logits = final_logits.at[n_leaves:-1, n_leaves:].set(masked_ancestor_logits)
+
+    # 3. The root has no parent, so it points to itself before the softmax.
+    final_logits = final_logits.at[-1, -1].set(1.0)
+
+    return nn.softmax(final_logits, axis=1)
 
 
 @jax.jit
