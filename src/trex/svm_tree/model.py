@@ -75,7 +75,7 @@ class LearnableHierarchicalSVM(eqx.Module):
             svm_index = node_index - self.n_leaves
             w = self.svm_weights[svm_index]
             b = self.svm_biases[svm_index]
-            decision = hard_decision(jnp.dot(w, x) + b)
+            decision = jax.nn.sigmoid(jnp.dot(w, x) + b)
             prob_left, prob_right = 1 - decision, decision
 
             indices = jnp.arange(self.n_total)

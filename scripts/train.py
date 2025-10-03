@@ -1,6 +1,10 @@
 import dataclasses
 from typing import Union, Optional
 
+from jax import config
+
+config.update("jax_debug_nans", True)
+
 import equinox as eqx
 import jax
 import jax.numpy as jnp
