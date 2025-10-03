@@ -303,7 +303,11 @@ def run_trex_optimization(
   )
 
   # Training loop
-  for _ in range(1000):
+  def training_step(
+    i: jax.Array,
+    carry: tuple[dict, optax.OptState, PRNGKeyArray],
+  ) -> tuple[dict, optax.OptState, PRNGKeyArray]:
+    params, opt_state, key = carry
     _, grads = loss_and_grad(
       key,
       params,
@@ -318,6 +322,14 @@ def run_trex_optimization(
       "dict[str, jax.Array | list[jax.Array]]",
       (optax.apply_updates(params, updates)),
     )
+    return params, opt_state, key
+
+  params, _, _ = jax.lax.fori_loop(
+    0,
+    10000,
+    training_step,
+    (params, opt_state, key),
+  )
   # Get the reconstructed ancestors
   return jnp.argmax(jnp.stack(params["ancestors"]), axis=-1)
 
@@ -343,7 +355,14 @@ def benchmark(
   key, subkey = jax.random.split(key)
   root_sequence = jax.random.randint(subkey, (n, 1), 0, 2)
   key, subkey = jax.random.split(key)
-  tree_data = generate_tree_data(landscape, adj_matrix, root_sequence, mutation_rate, subkey)
+  tree_data = generate_tree_data(
+    landscape,
+    adj_matrix,
+    root_sequence,
+    mutation_rate,
+    subkey,
+    coupled_mutation_prob=0.5,
+  )
   leaf_sequences = tree_data.all_sequences[:n_leaves].astype(jnp.int32)
   true_ancestors = tree_data.all_sequences[n_leaves:].astype(jnp.int32)
 
@@ -395,12 +414,12 @@ def benchmark(
 
 # Update the main execution block
 if __name__ == "__main__":
-  N = 100
+  N = 15
   K_values = [1, 2, 5, 10]
   lambda_values = [0.0, 0.3, 3.0]  # Test these lambda values
-  n_leaves = 8
+  n_leaves = 32
   mutation_rate = 0.1
-  num_replicates = 20  # Use a smaller number for faster testing
+  num_replicates = 2  # Use a smaller number for faster testing
 
   # Setup storage for results
   all_results = {K: {"sankoff": [], "trex": {L: [] for L in lambda_values}} for K in K_values}

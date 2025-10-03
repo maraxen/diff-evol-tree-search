@@ -81,6 +81,7 @@ def generate_tree_data(
   root_sequence: EvoSequence,
   mutation_rate: float,
   key: Array,
+  coupled_mutation_prob: float = 0.5,
 ) -> PhylogeneticTree:
   """Generate a tree of sequences using the NK model.
 
@@ -90,6 +91,7 @@ def generate_tree_data(
       root_sequence: The sequence at the root of the tree.
       mutation_rate: The probability of a mutation at each site.
       key: A JAX random key.
+      coupled_mutation_prob: The probability of performing a coupled mutation.
 
   Returns:
       A PhylogeneticTree object containing the generated sequences.
@@ -148,14 +150,40 @@ def generate_tree_data(
     parent_index = parent_indices[node_index]
 
     def evolve(parent_sequence: jax.Array, key: jax.Array) -> tuple[jax.Array, jax.Array]:
-      # Mutate the sequence
+      def random_mutation(key: jax.Array, parent_sequence: jax.Array) -> jax.Array:
+        # Standard random mutation
+        key, subkey = jax.random.split(key)
+        mutation_mask = jax.random.bernoulli(subkey, mutation_rate, (seq_length,))
+        key, subkey = jax.random.split(key)
+        new_values = jax.random.randint(subkey, (seq_length,), 0, 20)
+        return jnp.where(
+          mutation_mask,
+          new_values,
+          parent_sequence,
+        )
+
+      def coupled_mutation(key: jax.Array, parent_sequence: jax.Array) -> jax.Array:
+        # Coupled mutation on interacting sites
+        key, subkey1, subkey2 = jax.random.split(key, 3)
+        site_to_mutate = jax.random.randint(subkey1, (), 0, seq_length)
+        interacting_sites = landscape["interactions"][site_to_mutate]
+        sites_to_mutate = jnp.append(jnp.array([site_to_mutate]), interacting_sites)
+
+        mutation_mask = jnp.zeros_like(parent_sequence, dtype=bool).at[sites_to_mutate].set(True)
+
+        new_values = jax.random.randint(subkey2, (seq_length,), 0, 20)
+        return jnp.where(
+          mutation_mask,
+          new_values,
+          parent_sequence,
+        )
+
       key, subkey = jax.random.split(key)
-      mutation_mask = jax.random.bernoulli(subkey, mutation_rate, (seq_length,))
-      key, subkey = jax.random.split(key)
-      new_values = jax.random.randint(subkey, (seq_length,), 0, 20)
-      mutated_sequence = jnp.where(
-        mutation_mask,
-        new_values,
+      mutated_sequence = jax.lax.cond(
+        jax.random.bernoulli(subkey, coupled_mutation_prob),
+        coupled_mutation,
+        random_mutation,
+        key,
         parent_sequence,
       )
 
@@ -167,7 +195,7 @@ def generate_tree_data(
       key, subkey = jax.random.split(key)
       accepted = jax.random.bernoulli(subkey, jnp.minimum(1.0, acceptance_prob))
 
-      return jnp.where(accepted, mutated_sequence, parent_sequence), key
+      return jnp.asarray(jnp.where(accepted, mutated_sequence, parent_sequence)), key
 
     evolved_sequence, new_key = jax.lax.cond(
       node_index != root_node,

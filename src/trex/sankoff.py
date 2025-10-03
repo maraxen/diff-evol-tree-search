@@ -26,8 +26,6 @@ def run_dp(
   backtracking_table: BacktrackingTable,
   sequences: BatchEvoSequence,
   cost_matrix: CostMatrix,
-  *,
-  verbose: bool = False,
 ) -> tuple[DPTable, BacktrackingTable]:
   """Run Sankoff's algorithm using dynamic programming over a tree topology.
 
@@ -37,7 +35,6 @@ def run_dp(
       backtracking_table: A table to store backtracking information.
       sequences: The sequences of the leaf nodes.
       cost_matrix: The cost matrix for character substitutions.
-      verbose: If True, prints progress information.
 
   Returns:
       A tuple containing the filled DP table and the backtracking table.
@@ -82,16 +79,6 @@ def run_dp(
     dp_nodes_val = dp_nodes_val.at[node, :, 1].set(child_char_arr[0])  # Child 1 States
     dp_nodes_val = dp_nodes_val.at[node, :, 2].set(child_node_arr[1])  # Child 2 Node
     dp_nodes_val = dp_nodes_val.at[node, :, 3].set(child_char_arr[1])  # Child 2 States
-
-    jax.lax.cond(
-      verbose,
-      lambda: jax.debug.print(
-        "at node {node} children are : {children}",
-        node=node + 1,
-        children=children,
-      ),
-      lambda: None,
-    )
 
     return dp_val, dp_nodes_val
 
