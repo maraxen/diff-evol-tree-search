@@ -8,6 +8,109 @@ from jaxtyping import Array, Float, PyTree
 
 from .components.svm import LinearSVM
 from .components.topology import DifferentiableTopology
+from .components.ste import hard_decision
+
+
+class LearnableHierarchicalSVM(eqx.Module):
+    """
+    A hierarchical SVM model with a dynamically learnable topology.
+    This model uses a top-down traversal with hard routing decisions
+    enabled by a Straight-Through Estimator (STE).
+    """
+
+    svm_weights: Float[Array, "n_ancestors in_features"]
+    svm_biases: Float[Array, "n_ancestors"]
+    topology: DifferentiableTopology
+    num_classes: int
+    n_leaves: int
+    n_ancestors: int
+    in_features: int
+    n_total: int
+
+    def __init__(
+        self,
+        in_features: int,
+        num_classes: int,
+        *,
+        key: "jax.random.PRNGKey",
+        sparsity_regularization_strength: float = 0.01,
+        graph_constraint_scale: float = 10.0,
+    ):
+        self.num_classes = num_classes
+        self.n_leaves = num_classes
+        self.n_ancestors = num_classes - 1
+        self.in_features = in_features
+        self.n_total = self.n_leaves + self.n_ancestors
+
+        svm_key, topo_key = jax.random.split(key)
+
+        # Initialize SVM parameters for all potential internal nodes
+        svm_keys = jax.random.split(svm_key, self.n_ancestors)
+        svms = [LinearSVM(in_features, key=k) for k in svm_keys]
+        self.svm_weights = jnp.stack([svm.weights for svm in svms])
+        self.svm_biases = jnp.stack([svm.bias for svm in svms])
+
+        # Initialize the differentiable topology learner
+        self.topology = DifferentiableTopology(
+            key=topo_key,
+            n_leaves=self.n_leaves,
+            n_ancestors=self.n_ancestors,
+            sparsity_regularization_strength=sparsity_regularization_strength,
+            graph_constraint_scale=graph_constraint_scale,
+        )
+
+    def __call__(
+        self, x: Float[Array, "in_features"], *, key: "jax.random.PRNGKey"
+    ) -> Float[Array, "num_classes"]:
+        """
+        Performs a top-down, differentiable traversal of the tree.
+        """
+        adj = self.topology(key)
+        root_index = self.n_total - 1
+        initial_path_probs = jnp.zeros(self.n_total).at[root_index].set(1.0)
+        ancestor_indices_descending = jnp.arange(root_index, self.n_leaves - 1, -1)
+
+        def body_fn(path_probs, node_index):
+            prob_reaching_node = path_probs[node_index]
+            svm_index = node_index - self.n_leaves
+            w = self.svm_weights[svm_index]
+            b = self.svm_biases[svm_index]
+            decision = jax.nn.sigmoid(jnp.dot(w, x) + b)
+            prob_left, prob_right = 1 - decision, decision
+
+            indices = jnp.arange(self.n_total)
+            child_mask = indices < node_index
+            children_parent_probs = adj[:, node_index] * child_mask
+
+            pair_probs = children_parent_probs[:, None] * children_parent_probs[None, :]
+            i_indices = indices[:, None]
+            j_indices = indices[None, :]
+            pair_mask = i_indices < j_indices
+            pair_probs *= pair_mask
+
+            pair_probs_sum = jnp.sum(pair_probs)
+            pair_probs = jax.lax.cond(
+                pair_probs_sum > 0,
+                lambda: pair_probs / pair_probs_sum,
+                lambda: pair_probs,
+            )
+
+            prob_updates_i = jnp.sum(pair_probs, axis=1) * prob_left
+            prob_updates_j = jnp.sum(pair_probs, axis=0) * prob_right
+            path_probs_updates = (prob_updates_i + prob_updates_j) * prob_reaching_node
+
+            new_path_probs = path_probs.at[node_index].set(0.0)
+            new_path_probs = new_path_probs.at[indices].add(path_probs_updates)
+            return new_path_probs, None
+
+        final_path_probs, _ = jax.lax.scan(
+            body_fn, initial_path_probs, ancestor_indices_descending
+        )
+        return final_path_probs[: self.n_leaves]
+
+    def loss(self, adjacency: Float[Array, "n_nodes n_nodes"]) -> Float[Array, ""]:
+        """Computes the regularization loss for the topology."""
+        return self.topology.loss(adjacency)
 
 
 class LearnableTreeModel(eqx.Module):
@@ -253,7 +356,16 @@ class SingleSVMModel(eqx.Module):
     def __init__(
         self, in_features: int, num_classes: int, *, key: "jax.random.PRNGKey"
     ):
-        """Initializes the SingleSVMModel.
+        """Initializes the SingleSVMModel."""
+        self.in_features = in_features
+        self.num_classes = num_classes
+        self.svm = LinearSVM(in_features, out_features=num_classes, key=key)
+
+    def __call__(self, x: Float[Array, "in_features"]) -> Float[Array, "num_classes"]:
+        """Computes the decision function for the SVM."""
+        return self.svm(x)
+
+
 class OvR_SVM_Model(eqx.Module):
     """A One-vs-Rest model using multiple LinearSVMs."""
 

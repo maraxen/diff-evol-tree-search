@@ -125,23 +125,23 @@ def enforce_graph_constraints(
   scaling_factor: float,
 ) -> Cost:
   """Calculate a loss to enforce that the tree is binary.
-
   This loss penalizes deviations from the constraint that each ancestor node
   should have exactly two children.
-
   Args:
       adjacency: The soft tree topology.
       scaling_factor: A scaling factor for the loss.
-
   Returns:
       The calculated constraint-forcing loss.
-
   """
   n_total_nodes = adjacency.shape[0]
   n_ancestor_nodes = (n_total_nodes - 1) // 2
   ancestor_columns = adjacency[:-1, -n_ancestor_nodes:]
-
-  return jnp.sum(jnp.power(scaling_factor * jnp.abs(jnp.sum(ancestor_columns, axis=0) - 2), 2))
+  child_sums = jnp.sum(ancestor_columns, axis=0)
+  # This loss penalizes deviations from the ideal child sum of 2.
+  # Using a squared difference creates a quadratic penalty.
+  # The scaling factor is applied to the final sum to balance it with
+  # the primary surrogate cost.
+  return scaling_factor * jnp.sum((child_sums - 2) ** 2)
 
 
 @jax.jit
