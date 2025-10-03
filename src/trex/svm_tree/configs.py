@@ -32,6 +32,7 @@ class TrainConfig:
     learning_rate: float = 1e-3
     num_epochs: int = 10
     seed: int = 42
+    topology_loss_weight: float = 1.0
 
 
 @dataclass
@@ -52,3 +53,21 @@ class MNISTConfig:
     model: ModelConfig = field(default_factory=ModelConfig)
     train: TrainConfig = field(default_factory=TrainConfig)
     wandb: WandbConfig = field(default_factory=WandbConfig)
+
+
+@dataclass
+class LearnableModelConfig:
+    """Configuration for the learnable tree model."""
+
+    in_features: int = 28 * 28
+    sparsity_regularization_strength: float = 0.01
+    graph_constraint_scale: float = 10.0
+
+
+@dataclass
+class LearnableMNISTConfig:
+    """Top-level configuration for the MNIST experiment with a learnable tree."""
+
+    data: DataConfig = field(default_factory=DataConfig)
+    model: LearnableModelConfig = field(default_factory=LearnableModelConfig)
+    train: TrainConfig = field(default_factory=TrainConfig)

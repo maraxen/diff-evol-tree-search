@@ -23,6 +23,7 @@ dependencies = [
   "wandb",
   "scikit-learn",
   "matplotlib",
+  "tyro",
 ]
 
 [project.optional-dependencies]
