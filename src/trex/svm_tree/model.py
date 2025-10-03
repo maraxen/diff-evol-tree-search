@@ -122,3 +122,32 @@ class BaseTreeModel(eqx.Module):
             The model's output (a probability distribution over classes).
         """
         return self.root(x)
+
+
+class OvR_SVM_Model(eqx.Module):
+    """A One-vs-Rest model using multiple LinearSVMs."""
+
+    svms: list[LinearSVM]
+
+    def __init__(self, in_features: int, num_classes: int, *, key: "jax.random.PRNGKey"):
+        """Initializes the OvR_SVM_Model.
+
+        Args:
+            in_features: The number of input features.
+            num_classes: The number of output classes.
+            key: A JAX PRNG key for initializing the SVMs.
+        """
+        keys = jax.random.split(key, num_classes)
+        self.svms = [LinearSVM(in_features, key=k) for k in keys]
+
+    def __call__(self, x: Float[Array, "in_features"]) -> Float[Array, "num_classes"]:
+        """Computes the decision function for each class.
+
+        Args:
+            x: The input data.
+
+        Returns:
+            A vector of decision function outputs, one for each class.
+        """
+        # Apply each SVM to the input x
+        return jnp.stack([svm(x) for svm in self.svms])
