@@ -8,40 +8,44 @@ This document tracks the development of the Differentiable SVM Tree. Our guiding
 
 ## Phase 0: Project Setup & CI/CD Hardening
 
-*Status: All tasks in this phase must be completed before proceeding.*
-
 | Task ID | Description | Status | Notes |
 | :--- | :--- | :--- | :--- |
-| **0.1** | Establish Project Scaffolding (`/scripts`, `/svm_tree`) | 📝 **To Do** | |
-| **0.2** | Configure Unified Training Script & Dataclass Configs | 📝 **To Do** | `scripts/train.py`, `src/trex/svm_tree/configs.py` |
-| **0.3** | Implement CI/CD with `uv` | 📝 **To Do** | GH Actions: `uv venv`, `uv pip install`, then run `ruff`, `pyright`, `pytest`. |
+| **0.1** | Establish Project Scaffolding (`/scripts`, `/svm_tree`) | ✅ **Done** | |
+| **0.2** | Configure Unified Training Script & Dataclass Configs | ✅ **Done** | `scripts/train.py`, `src/trex/svm_tree/configs.py` |
+| **0.3** | Implement CI/CD with `uv` | ✅ **Done** | GH Actions: `uv venv`, `uv pip install`, then run `ruff`, `pyright`, `pytest`. |
 
 ---
 
 ## Phase 1: Core Component Development (Parallel)
 
-**Architectural Guideline**: All stateful components **must be `equinox.Module` subclasses** to cleanly separate parameters from code logic.
-
-*Definition of Done: >90% test coverage, full documentation, and passing CI checks for all new modules.*
-
 | Task ID | Description | Status | Notes |
 | :--- | :--- | :--- | :--- |
-| **1.A.1** | Implement `svm.py` as an `equinox.Module` | 📝 **To Do** | Location: `.../components/svm.py` |
-| **1.A.2** | Implement SVM Unit Tests | 📝 **To Do** | |
-| **1.B.1** | Implement `data_utils.py` for MNIST | 📝 **To Do** | |
-| **1.B.2** | Define Dataclasses in `configs.py` for MNIST | 📝 **To Do** | |
+| **1.A.1** | Implement `svm.py` as an `equinox.Module` | ✅ **Done** | Location: `.../components/svm.py` |
+| **1.A.2** | Implement SVM Unit Tests | ✅ **Done** | |
+| **1.B.1** | Implement `data_utils.py` for MNIST | ✅ **Done** | |
+| **1.B.2** | Define Dataclasses in `configs.py` for MNIST | ✅ **Done** | |
 | **1.B.3**| *(Ongoing)* Source & Prepare Plant Dataset | 📝 **To Do** | Research task. |
 
 ---
 
 ## Phase 2: System Integration & Validation
 
-*Goal: Prove the end-to-end viability of the core architecture with a fixed tree.*
+| Task ID | Description | Status | Notes |
+| :--- | :--- | :--- | :--- |
+| **2.1** | Implement `BaseTreeModel` with Fixed Topology | ✅ **Done** | |
+| **2.2** | Integrate and run MNIST experiment via `scripts/train.py` | ✅ **Done** | **Result: ~76% accuracy. Establishes baseline.** |
+
+---
+
+## Phase 2.5: Performance Analysis & Tuning
+
+*Goal: Understand the performance characteristics of the fixed-tree model before adding more complexity.*
 
 | Task ID | Description | Status | Notes |
 | :--- | :--- | :--- | :--- |
-| **2.1** | Implement `BaseTreeModel` with Fixed Topology | 📝 **To Do** | Depends on Phase 1 |
-| **2.2** | Integrate and run MNIST experiment via `scripts/train.py` | 📝 **To Do** | Depends on 2.1 |
+| **2.5.1** | Instrument code with an experiment tracker (`wandb` or `mlflow`) | ✅ **Done** | Implemented with `wandb`. |
+| **2.5.2** | Run Ablation Study: Single SVM Node Baseline | ✅ **Done** | **Finding: Single SVM (~92%) outperforms Tree Model (~79%).** |
+| **2.5.3** | Run Brief Hyperparameter Sweep (Learning Rate) | ✅ **Done** | Optimal LR for Single SVM is `1e-2`. |
 
 ---
 
@@ -51,7 +55,7 @@ This document tracks the development of the Differentiable SVM Tree. Our guiding
 
 | Task ID | Description | Status | Notes |
 | :--- | :--- | :--- | :--- |
-| **3.1** | Create `DifferentiableTopology` Component | 📝 **To Do** | Depends on Phase 2 |
+| **3.1** | Create `DifferentiableTopology` Component | 📝 **To Do** | Depends on Phase 2.5 |
 | **3.2** | Create `LearnableTreeModel` via Composition | 📝 **To Do** | Depends on 3.1 |
 | **3.3** | Run Learnable Tree Experiment on MNIST | 📝 **To Do** | Depends on 3.2 |
 

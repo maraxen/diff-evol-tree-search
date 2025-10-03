@@ -122,3 +122,36 @@ class BaseTreeModel(eqx.Module):
             The model's output (a probability distribution over classes).
         """
         return self.root(x)
+
+
+class SingleSVMModel(eqx.Module):
+    """A single, multi-class SVM model."""
+
+    svm: LinearSVM
+    in_features: int
+    num_classes: int
+
+    def __init__(
+        self, in_features: int, num_classes: int, *, key: "jax.random.PRNGKey"
+    ):
+        """Initializes the SingleSVMModel.
+
+        Args:
+            in_features: The number of input features.
+            num_classes: The number of output classes.
+            key: A JAX PRNG key for initializing the SVM.
+        """
+        self.in_features = in_features
+        self.num_classes = num_classes
+        self.svm = LinearSVM(in_features, out_features=num_classes, key=key)
+
+    def __call__(self, x: Float[Array, "in_features"]) -> Float[Array, "num_classes"]:
+        """Computes the forward pass of the model.
+
+        Args:
+            x: The input data.
+
+        Returns:
+            The model's output (logits for each class).
+        """
+        return self.svm(x)

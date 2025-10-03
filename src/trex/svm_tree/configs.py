@@ -1,4 +1,12 @@
 from dataclasses import dataclass, field
+from enum import Enum
+
+
+class ModelType(Enum):
+    """Enum for model types."""
+
+    BASE_TREE = "base_tree"
+    SINGLE_SVM = "single_svm"
 
 
 @dataclass
@@ -15,6 +23,7 @@ class ModelConfig:
     """Configuration for the model."""
 
     in_features: int = 28 * 28
+    model_type: ModelType = ModelType.BASE_TREE
 
 @dataclass
 class TrainConfig:
@@ -26,9 +35,20 @@ class TrainConfig:
 
 
 @dataclass
+class WandbConfig:
+    """Configuration for Weights & Biases."""
+
+    use_wandb: bool = True
+    project: str = "differentiable-svm-tree"
+    entity: str = "trex"
+    run_name: str = "mnist_baseline"
+
+
+@dataclass
 class MNISTConfig:
     """Top-level configuration for the MNIST experiment."""
 
     data: DataConfig = field(default_factory=DataConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
     train: TrainConfig = field(default_factory=TrainConfig)
+    wandb: WandbConfig = field(default_factory=WandbConfig)
