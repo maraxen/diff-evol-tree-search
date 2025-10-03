@@ -7,6 +7,125 @@ from jax.random import PRNGKey
 from jaxtyping import Array, Float, PyTree
 
 from .components.svm import LinearSVM
+from .components.topology import DifferentiableTopology
+
+
+class LearnableTreeModel(eqx.Module):
+    """A tree model with a learnable topology."""
+
+    svm_weights: Float[Array, "n_ancestors in_features"]
+    svm_biases: Float[Array, "n_ancestors"]
+    topology: DifferentiableTopology
+    num_classes: int
+    n_leaves: int
+    n_ancestors: int
+    in_features: int
+
+    def __init__(
+        self,
+        in_features: int,
+        num_classes: int,
+        *,
+        key: "jax.random.PRNGKey",
+        sparsity_regularization_strength: float = 0.01,
+        graph_constraint_scale: float = 10.0,
+    ):
+        """Initializes the LearnableTreeModel.
+        Args:
+            in_features: The number of input features.
+            num_classes: The number of output classes.
+            key: A JAX PRNG key for initializing the SVMs and topology.
+            sparsity_regularization_strength: The strength of the L1 sparsity penalty.
+            graph_constraint_scale: The scaling factor for the graph constraint loss.
+        """
+        self.num_classes = num_classes
+        self.n_leaves = num_classes
+        self.n_ancestors = num_classes - 1
+        self.in_features = in_features
+
+        svm_key, topo_key = jax.random.split(key)
+        svm_keys = jax.random.split(svm_key, self.n_ancestors)
+
+        svms = [LinearSVM(in_features, key=k) for k in svm_keys]
+        self.svm_weights = jnp.stack([svm.weights for svm in svms])
+        self.svm_biases = jnp.stack([svm.bias for svm in svms])
+
+        self.topology = DifferentiableTopology(
+            key=topo_key,
+            n_leaves=self.n_leaves,
+            n_ancestors=self.n_ancestors,
+            sparsity_regularization_strength=sparsity_regularization_strength,
+            graph_constraint_scale=graph_constraint_scale,
+        )
+
+    def __call__(
+        self, x: Float[Array, "in_features"], *, key: "jax.random.PRNGKey"
+    ) -> Float[Array, "num_classes"]:
+        """Computes the forward pass using a differentiable, bottom-up approach.
+        Args:
+            x: The input data.
+            key: A JAX PRNG key for the topology calculation.
+        Returns:
+            The model's output (a probability distribution over classes).
+        """
+        adj = self.topology(key)
+
+        # Initialize node distributions: one-hot for leaves, zeros for ancestors
+        leaf_dists = jax.nn.one_hot(jnp.arange(self.n_leaves), self.num_classes)
+        ancestor_dists = jnp.zeros((self.n_ancestors, self.num_classes))
+        node_dists = jnp.concatenate([leaf_dists, ancestor_dists], axis=0)
+
+        # Iterate bottom-up from the lowest ancestors to the root
+        ancestor_indices = jnp.arange(self.n_leaves, self.n_leaves + self.n_ancestors)
+
+        def body_fn(dists, k):
+            svm_index = k - self.n_leaves
+            w = self.svm_weights[svm_index]
+            b = self.svm_biases[svm_index]
+            prob_right = jax.nn.sigmoid(jnp.dot(w, x) + b)
+
+            # Use masking to handle dynamic child selection instead of slicing.
+            # This keeps array shapes static and JAX-compatible.
+            indices = jnp.arange(self.n_leaves + self.n_ancestors)
+            child_mask = (indices < k)
+
+            # P(parent(i) = k) for each potential child i, masked for i < k
+            children_parent_probs = adj[:, k] * child_mask
+
+            # P(c1=i, c2=j | parent=k) ~= P(parent(i)=k) * P(parent(j)=k)
+            pair_probs = children_parent_probs[:, None] * children_parent_probs[None, :]
+
+            # Mask to avoid self-pairing (i=j) and double-counting (j, i)
+            i_indices = indices[:, None]
+            j_indices = indices[None, :]
+            pair_mask = (i_indices < j_indices)
+            pair_probs = pair_probs * pair_mask
+
+            # Use the full dists array, not a slice
+            dists_left = dists[:, None, :]
+            dists_right = dists[None, :, :]
+
+            # Mix distributions for all possible pairs
+            mixed_dists = (1 - prob_right) * dists_left + prob_right * dists_right
+
+            # Weight the mixed distributions by the pair probabilities
+            weighted_dists = pair_probs[..., None] * mixed_dists
+
+            # Sum over all pairs to get the final distribution for the current node
+            dist_k = jnp.sum(weighted_dists, axis=(0, 1))
+
+            # Normalize distribution to prevent vanishing/exploding probs
+            dist_k_sum = jnp.sum(dist_k)
+            dist_k = jax.lax.cond(dist_k_sum > 0, lambda: dist_k / dist_k_sum, lambda: dist_k)
+
+            return dists.at[k].set(dist_k), None
+
+        final_dists, _ = jax.lax.scan(body_fn, node_dists, ancestor_indices)
+        return final_dists[-1]
+
+    def loss(self, adjacency: Float[Array, "n_nodes n_nodes"]) -> Float[Array, ""]:
+        """Computes the regularization loss for the topology."""
+        return self.topology.loss(adjacency)
 
 
 class Node(eqx.Module):
