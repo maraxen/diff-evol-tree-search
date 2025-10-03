@@ -9,6 +9,58 @@ from typing import Union
 
 from trex.svm_tree.configs import MNISTConfig, LearnableMNISTConfig
 from trex.svm_tree.data_utils import get_mnist_dataloaders
+from trex.svm_tree.model import OvR_SVM_Model
+
+
+def huber_hinge_loss(scores, labels, num_classes=10):
+    """
+    Computes the multiclass Huber Hinge loss for a One-vs-Rest SVM.
+    This function works for both single examples and batches.
+    """
+    # Convert labels to one-hot and then to +1/-1 format
+    labels_one_hot = jax.nn.one_hot(labels, num_classes)
+    y_true = (labels_one_hot * 2) - 1
+
+    # Calculate the hinge loss component
+    loss = jnp.maximum(0, 1 - y_true * scores)
+
+    # Square it for the Huber-like effect and take the mean
+    return jnp.mean(loss**2)
+
+
+def loss_fn(model, x, y):
+    """Computes the Huber Hinge loss for a single example."""
+    scores = model(x)
+    return huber_hinge_loss(scores, y)
+
+
+def mean_batch_loss(model, x, y):
+    """Computes the mean Huber Hinge loss over an entire batch."""
+    # Vmap the single-example loss function across the batch.
+    losses = jax.vmap(loss_fn, in_axes=(None, 0, 0))(model, x, y)
+    return jnp.mean(losses)
+
+
+@eqx.filter_jit
+def train_step(model, x, y, optimizer, opt_state):
+    """Performs a single training step."""
+    # Differentiate the mean batch loss function.
+    loss, grads = eqx.filter_value_and_grad(mean_batch_loss)(model, x, y)
+    updates, opt_state = optimizer.update(grads, opt_state)
+    model = eqx.apply_updates(model, updates)
+    return model, opt_state, loss
+
+
+@eqx.filter_jit
+def eval_step(model, x, y):
+    """Computes the accuracy on a batch of data for an OvR model."""
+    pred_scores = jax.vmap(model)(x)
+    # The predicted label is the one with the highest score
+    pred_labels = jnp.argmax(pred_scores, axis=1)
+    return jnp.mean(pred_labels == y)
+
+
+def main():
 from trex.svm_tree.model import BaseTreeModel, LearnableTreeModel
 
 
@@ -24,6 +76,11 @@ def main(cfg: Union[MNISTConfig, LearnableMNISTConfig]):
         cfg.data.test_subset_size,
     )
 
+    # Create model and optimizer
+    ovr_model_key, _ = jax.random.split(key)
+    ovr_model = OvR_SVM_Model(
+        in_features=cfg.model.in_features, num_classes=10, key=model_key
+    )
     # Create model
     model_key, train_key, eval_key = jax.random.split(key, 3)
     if isinstance(cfg, LearnableMNISTConfig):
@@ -92,6 +149,13 @@ def main(cfg: Union[MNISTConfig, LearnableMNISTConfig]):
     for epoch in range(cfg.train.num_epochs):
         train_key, epoch_train_key = jax.random.split(train_key)
         total_loss = 0
+        for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{cfg.train.num_epochs}"):
+            x_batch, y_batch = batch
+            x_batch = x_batch.numpy()
+            y_batch = y_batch.numpy()
+
+            model, opt_state, loss = train_step(
+                ovr_model, x_batch, y_batch, optimizer, opt_state
 
         pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{cfg.train.num_epochs}")
         for batch in pbar:
@@ -112,11 +176,16 @@ def main(cfg: Union[MNISTConfig, LearnableMNISTConfig]):
         eval_key, epoch_eval_key = jax.random.split(eval_key)
         total_accuracy = 0
         for batch in test_loader:
+            x_batch, y_batch = batch
+            x_batch = x_batch.numpy()
+            y_batch = y_batch.numpy()
             epoch_eval_key, batch_key = jax.random.split(epoch_eval_key)
             x, y = batch
             x = x.numpy()
             y = y.numpy()
             total_accuracy += eval_step(model, x, y, batch_key)
+            total_ovr_accuracy += eval_step(ovr_model, x_batch, y_batch)
+
 
         avg_accuracy = total_accuracy / len(test_loader)
         print(f"Epoch {epoch+1}: Loss = {avg_loss:.4f}, Accuracy = {avg_accuracy:.4f}")
