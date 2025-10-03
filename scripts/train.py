@@ -1,15 +1,22 @@
+import argparse
+import dataclasses
+
 import equinox as eqx
 import jax
 import jax.numpy as jnp
+import matplotlib.pyplot as plt
 import numpy as np
 import optax
+import wandb
+from sklearn.metrics import confusion_matrix
 import tyro
 from tqdm import tqdm
 from typing import Union
 
+
+from trex.svm_tree.model import BaseTreeModel, SingleSVMModel, OvR_SVM_Model
 from trex.svm_tree.configs import MNISTConfig, LearnableMNISTConfig
 from trex.svm_tree.data_utils import get_mnist_dataloaders
-from trex.svm_tree.model import OvR_SVM_Model
 
 
 def huber_hinge_loss(scores, labels, num_classes=10):
@@ -53,11 +60,11 @@ def train_step(model, x, y, optimizer, opt_state):
 
 @eqx.filter_jit
 def eval_step(model, x, y):
-    """Computes the accuracy on a batch of data for an OvR model."""
-    pred_scores = jax.vmap(model)(x)
-    # The predicted label is the one with the highest score
-    pred_labels = jnp.argmax(pred_scores, axis=1)
-    return jnp.mean(pred_labels == y)
+    """Computes the accuracy on a batch of data."""
+    pred_y = jax.vmap(model)(x)
+    pred_labels = jnp.argmax(pred_y, axis=1)
+    accuracy = jnp.mean(pred_labels == y)
+    return accuracy, pred_labels
 
 
 def main():
@@ -66,7 +73,23 @@ from trex.svm_tree.model import BaseTreeModel, LearnableTreeModel
 
 def main(cfg: Union[MNISTConfig, LearnableMNISTConfig]):
     """Main training and evaluation loop."""
-    print(f"Running with configuration: {cfg.__class__.__name__}")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--learning_rate", type=float, default=None)
+    args = parser.parse_args()
+
+    cfg = MNISTConfig()
+    if args.learning_rate is not None:
+        cfg.train.learning_rate = args.learning_rate
+        cfg.wandb.run_name = f"{cfg.model.model_type.value}_lr_{args.learning_rate}"
+
+    if cfg.wandb.use_wandb:
+        wandb.init(
+            project=cfg.wandb.project,
+            entity=cfg.wandb.entity,
+            name=cfg.wandb.run_name,
+            config=dataclasses.asdict(cfg),
+        )
+
     key = jax.random.PRNGKey(cfg.train.seed)
 
     # Create DataLoaders
@@ -77,6 +100,18 @@ def main(cfg: Union[MNISTConfig, LearnableMNISTConfig]):
     )
 
     # Create model and optimizer
+    model_key, _ = jax.random.split(key)
+    if cfg.model.model_type == ModelType.BASE_TREE:
+        model = BaseTreeModel(
+            in_features=cfg.model.in_features, num_classes=10, key=model_key
+        )
+    elif cfg.model.model_type == ModelType.SINGLE_SVM:
+        model = SingleSVMModel(
+            in_features=cfg.model.in_features, num_classes=10, key=model_key
+        )
+    else:
+        raise ValueError(f"Unknown model type: {cfg.model.model_type}")
+
     ovr_model_key, _ = jax.random.split(key)
     ovr_model = OvR_SVM_Model(
         in_features=cfg.model.in_features, num_classes=10, key=model_key
@@ -175,6 +210,8 @@ def main(cfg: Union[MNISTConfig, LearnableMNISTConfig]):
         # Evaluation
         eval_key, epoch_eval_key = jax.random.split(eval_key)
         total_accuracy = 0
+        all_preds = []
+        all_labels = []
         for batch in test_loader:
             x_batch, y_batch = batch
             x_batch = x_batch.numpy()
@@ -183,12 +220,41 @@ def main(cfg: Union[MNISTConfig, LearnableMNISTConfig]):
             x, y = batch
             x = x.numpy()
             y = y.numpy()
-            total_accuracy += eval_step(model, x, y, batch_key)
-            total_ovr_accuracy += eval_step(ovr_model, x_batch, y_batch)
+            total_accuracy += eval_step(model, x, y, batch_key)[0]
+            total_ovr_accuracy += eval_step(ovr_model, x_batch, y_batch)[0]
+            all_labels.append(y_batch)
+            all_preds.append(eval_step(model, x, y, batch_key)[1])
+            all_preds_over.append(eval_step(ovr_model, x_batch, y_batch)[1])
 
 
         avg_accuracy = total_accuracy / len(test_loader)
         print(f"Epoch {epoch+1}: Loss = {avg_loss:.4f}, Accuracy = {avg_accuracy:.4f}")
+
+        if cfg.wandb.use_wandb:
+            wandb.log(
+                {"epoch": epoch, "train_loss": avg_loss, "test_accuracy": avg_accuracy}
+            )
+
+    # After the last epoch, compute and log the confusion matrix
+    if cfg.wandb.use_wandb:
+        all_preds = np.concatenate(all_preds)
+        all_labels = np.concatenate(all_labels)
+        cm = confusion_matrix(all_labels, all_preds)
+        fig, ax = plt.subplots(figsize=(10, 10))
+        cax = ax.matshow(cm, cmap=plt.cm.Blues)
+        fig.colorbar(cax)
+        ax.set_xlabel("Predicted")
+        ax.set_ylabel("True")
+        ax.set_title("Confusion Matrix")
+        # Add text annotations.
+        for i in range(cm.shape[0]):
+            for j in range(cm.shape[1]):
+                ax.text(j, i, str(cm[i, j]), va='center', ha='center')
+
+        wandb.log({"confusion_matrix": wandb.Image(plt)})
+        plt.close(fig)
+
+        wandb.finish()
 
 
 if __name__ == "__main__":

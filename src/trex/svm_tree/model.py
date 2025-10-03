@@ -243,6 +243,17 @@ class BaseTreeModel(eqx.Module):
         return self.root(x)
 
 
+class SingleSVMModel(eqx.Module):
+    """A single, multi-class SVM model."""
+
+    svm: LinearSVM
+    in_features: int
+    num_classes: int
+
+    def __init__(
+        self, in_features: int, num_classes: int, *, key: "jax.random.PRNGKey"
+    ):
+        """Initializes the SingleSVMModel.
 class OvR_SVM_Model(eqx.Module):
     """A One-vs-Rest model using multiple LinearSVMs."""
 

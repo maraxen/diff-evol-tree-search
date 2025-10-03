@@ -1,67 +1,53 @@
-# Byte-compiled / optimized / DLL files
+# Wandb
+wandb/
+/wandb/
+
+# Data
+data/
+/data/
+
+# Python
 __pycache__/
-*.py[cod]
-*$py.class
-
-# C extensions
-*.so
-
-# Distribution / packaging
+*.pyc
+*.pyo
+*.pyd
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-
-# Environments
-.env
-.venv
 env/
 venv/
-ENV/
-env.bak/
-venv.bak/
+.venv/
 
-# Project-specific
-data/
-uv.lock
-.mypy_cache/
-.ruff_cache/
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+
+# Other
+.DS_Store
+*.log
+*.tmp
+*.bak
+*.orig
+*.patch
+*.diff
+*.rej
+*.out
+*.err
+*.pid
+*.pid.lock
+*.seed
+*.db
+*.sqlite
+*.sqlite3
+*.coverage
+*.cache
+*.mypy_cache/
+*.pytest_cache/
+*.ruff_cache/
+*.hypothesis/
