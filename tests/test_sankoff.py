@@ -38,7 +38,7 @@ def test_run_dp_basic():
 
 def test_run_sankoff_basic():
   # Tree: 3 leaves, 2 ancestors (n_all=5)
-  adj = jnp.zeros((5, 5), dtype=jnp32)
+  adj = jnp.zeros((5, 5), dtype=jnp.int32)
   adj = adj.at[0, 3].set(1)
   adj = adj.at[1, 3].set(1)
   adj = adj.at[2, 4].set(1)
